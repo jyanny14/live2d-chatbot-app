@@ -1,0 +1,54 @@
+{
+  "name": "live2d-chatbot-app",
+  "version": "1.0.0",
+  "description": "Live2D Chatbot Desktop App (Electron+React+TypeScript)",
+  "main": "dist/main/index.js",
+  "scripts": {
+    "dev": "npm run build:electron && concurrently \"vite\" \"wait-on tcp:5174 && cross-env IS_DEV=true electron .\"",
+    "build": "npm run build:electron && tsc && vite build",
+    "build:electron": "tsc -p tsconfig.electron.json",
+    "preview": "vite preview",
+    "dist": "npm run build && electron-builder --win --publish=never"
+  },
+  "dependencies": {
+    "live2dcubismcore": "^1.0.2",
+    "pixi-live2d-display": "^0.4.0",
+    "pixi.js": "^8.10.1",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.5",
+    "@types/react": "^18.2.43",
+    "@types/react-dom": "^18.2.17",
+    "@vitejs/plugin-react": "^4.2.1",
+    "concurrently": "^8.2.2",
+    "cross-env": "^7.0.3",
+    "electron": "^28.1.0",
+    "electron-builder": "^24.9.1",
+    "typescript": "^5.2.2",
+    "vite": "^5.0.8",
+    "wait-on": "^7.2.0"
+  },
+  "build": {
+    "appId": "com.live2d.chatbot",
+    "productName": "Live2D Chatbot",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "node_modules/**/*"
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "public/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
+  },
+  "author": "Your Name",
+  "license": "MIT"
+}
