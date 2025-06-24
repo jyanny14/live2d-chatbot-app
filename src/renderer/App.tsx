@@ -1,8 +1,11 @@
-import React, { useState, useEffect } from 'react'
+import React from 'react'
+import './App.css'
 import Live2DCanvas from './components/live2d/Live2DCanvas'
 import ChatWindow from './components/chat/ChatWindow'
 import ChatInput from './components/chat/ChatInput'
+import { LIVE2D_MODEL_PATH } from './constants/live2d'
 
+// ChatMessage 타입: id, type('user'|'ai'), content, timestamp
 interface ChatMessage {
   id: string
   type: 'user' | 'ai'
@@ -10,10 +13,12 @@ interface ChatMessage {
   timestamp: Date
 }
 
-function App() {
-  const [messages, setMessages] = useState<ChatMessage[]>([])
-  const [isTyping, setIsTyping] = useState(false)
-  const [isModelLoaded, setIsModelLoaded] = useState(false)
+const App: React.FC = () => {
+  const [messages, setMessages] = React.useState<ChatMessage[]>([
+    { id: 'welcome', type: 'ai', content: '안녕하세요! 무엇을 도와드릴까요?', timestamp: new Date() }
+  ])
+  const [isTyping, setIsTyping] = React.useState(false)
+  const [isModelLoaded, setIsModelLoaded] = React.useState(false)
 
   // AI 응답 생성 함수
   const generateAIResponse = (userMessage: string): string => {
@@ -49,39 +54,26 @@ function App() {
   }
 
   // 메시지 전송 처리
-  const handleSendMessage = (content: string) => {
-    if (!content.trim()) return
-
-    // 사용자 메시지 추가
-    const userMessage: ChatMessage = {
-      id: Date.now().toString(),
-      type: 'user',
-      content: content.trim(),
-      timestamp: new Date()
-    }
-
-    setMessages(prev => [...prev, userMessage])
+  const handleSend = (text: string) => {
+    if (!text.trim()) return
+    setMessages(prev => [...prev, { id: Date.now().toString(), type: 'user', content: text, timestamp: new Date() }])
     setIsTyping(true)
-
-    // AI 응답 시뮬레이션 (1-3초 지연)
-    const responseDelay = 1000 + Math.random() * 2000
-    
+    // AI 응답 시뮬레이션 (실제 API 연동 필요)
     setTimeout(() => {
       const aiResponse: ChatMessage = {
         id: (Date.now() + 1).toString(),
         type: 'ai',
-        content: generateAIResponse(content),
+        content: generateAIResponse(text),
         timestamp: new Date()
       }
-
       setIsTyping(false)
       setMessages(prev => [...prev, aiResponse])
-    }, responseDelay)
+    }, 1200)
   }
 
   // 대화 지우기
-  const handleClearChat = () => {
-    setMessages([])
+  const handleClear = () => {
+    setMessages([{ id: 'welcome', type: 'ai', content: '안녕하세요! 무엇을 도와드릴까요?', timestamp: new Date() }])
   }
 
   // Live2D 모델 로드 완료 처리
@@ -95,64 +87,17 @@ function App() {
   }
 
   return (
-    <div className="h-screen bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 flex flex-col">
-      {/* 헤더 */}
-      <header className="bg-black bg-opacity-20 backdrop-blur-md border-b border-white border-opacity-10 p-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-purple-500 rounded-lg flex items-center justify-center">
-              <span className="text-white font-bold text-sm">L2D</span>
-            </div>
-            <h1 className="text-white text-xl font-bold">Live2D Chatbot</h1>
-          </div>
-          
-          <div className="flex items-center gap-4">
-            {isModelLoaded && (
-              <div className="flex items-center gap-2 text-green-400">
-                <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
-                <span className="text-sm">연결됨</span>
-              </div>
-            )}
-            <div className="text-white text-sm opacity-70">
-              {new Date().toLocaleDateString('ko-KR')}
-            </div>
-          </div>
-        </div>
-      </header>
-
-      {/* 메인 컨텐츠 */}
-      <div className="flex-1 flex overflow-hidden">
-        {/* 왼쪽: Live2D 캐릭터 (50%) */}
-        <div className="w-1/2 p-4">
-          <div className="h-full bg-black bg-opacity-20 backdrop-blur-md rounded-xl overflow-hidden border border-white border-opacity-10">
-            <Live2DCanvas 
-              modelPath="/models/your-model.model3.json"
-              onModelLoaded={handleModelLoaded}
-              onModelError={handleModelError}
-            />
-          </div>
-        </div>
-
-        {/* 오른쪽: 채팅 인터페이스 (50%) */}
-        <div className="w-1/2 flex flex-col">
-          {/* 채팅 윈도우 */}
-          <div className="flex-1 p-4 pb-0">
-            <ChatWindow 
-              messages={messages}
-              isTyping={isTyping}
-              onClearChat={handleClearChat}
-            />
-          </div>
-
-          {/* 채팅 입력창 */}
-          <div className="p-4 pt-0">
-            <ChatInput 
-              onSendMessage={handleSendMessage}
-              disabled={!isModelLoaded || isTyping}
-              placeholder={isTyping ? "AI가 응답 중입니다..." : "메시지를 입력하세요..."}
-            />
-          </div>
-        </div>
+    <div className="app-root flex flex-row h-screen bg-gradient-to-br from-slate-900 to-slate-800">
+      <div className="live2d-panel flex-1 flex items-center justify-center p-4">
+        <Live2DCanvas 
+          modelPath={LIVE2D_MODEL_PATH}
+          onModelLoaded={handleModelLoaded}
+          onModelError={handleModelError}
+        />
+      </div>
+      <div className="chat-panel w-[420px] flex flex-col h-full bg-white/10 backdrop-blur-md border-l border-white/10 shadow-xl">
+        <ChatWindow messages={messages} isTyping={isTyping} onClearChat={handleClear} />
+        <ChatInput onSendMessage={handleSend} />
       </div>
     </div>
   )
