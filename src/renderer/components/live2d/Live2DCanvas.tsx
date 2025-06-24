@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useEffect, useRef, useState, useImperativeHandle, forwardRef } from 'react'
 import * as PIXI from 'pixi.js'
 import { Live2DModel } from 'pixi-live2d-display'
 import { LIVE2D_MODEL_PATH } from '../../constants/live2d'
@@ -9,19 +9,50 @@ interface Live2DCanvasProps {
   onModelError?: (error: Error) => void
 }
 
-const Live2DCanvas: React.FC<Live2DCanvasProps> = ({ 
+export interface Live2DCanvasHandle {
+  triggerRandomMotion: () => void
+}
+
+const Live2DCanvas = forwardRef<Live2DCanvasHandle, Live2DCanvasProps>(({ 
   modelPath = LIVE2D_MODEL_PATH,
   onModelLoaded,
   onModelError 
-}) => {
+}, ref) => {
   const canvasRef = useRef<HTMLDivElement>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const appRef = useRef<PIXI.Application | null>(null)
   const modelRef = useRef<Live2DModel | null>(null)
 
+  // 랜덤 모션 트리거 함수
+  const triggerRandomMotion = () => {
+    const model = modelRef.current
+    if (!model) return
+    // 모션 그룹 추출 (타입 우회)
+    const motionsObj = (model as any).internalModel?.motions || {}
+    const groups = Object.keys(motionsObj)
+    if (groups.length === 0) return
+    // 랜덤 그룹, 랜덤 모션 선택
+    const group = groups[Math.floor(Math.random() * groups.length)]
+    const motions = motionsObj[group]
+    if (!motions || motions.length === 0) return
+    const idx = Math.floor(Math.random() * motions.length)
+    // 모션 실행
+    model.motion(group, idx)
+  }
+
+  useImperativeHandle(ref, () => ({
+    triggerRandomMotion
+  }))
+
   useEffect(() => {
     if (!canvasRef.current) return
+
+    // Live2DModel Ticker 등록 (중복 방지)
+    if (!(window as any).__live2dTickerRegistered) {
+      Live2DModel.registerTicker(PIXI.Ticker.shared.constructor as typeof PIXI.Ticker)
+      ;(window as any).__live2dTickerRegistered = true
+    }
 
     let app: PIXI.Application | null = null
     let model: Live2DModel | null = null
@@ -49,11 +80,36 @@ const Live2DCanvas: React.FC<Live2DCanvasProps> = ({
         if (isUnmounted) return
         modelRef.current = model
 
-        // 모델 위치/스케일/앵커 설정
-        model.x = app.screen.width / 2
-        model.y = app.screen.height * 0.8
-        model.anchor.set(0.5, 1)
-        model.scale.set(0.125)
+        // bounding box 기반 자동 스케일 조정 (캔버스의 80% 크기)
+        model.scale.set(1)
+        await new Promise(r => setTimeout(r, 0)) // 한 프레임 대기(정확한 bounds 측정)
+        const bounds = model.getBounds()
+        const actualWidth = bounds.width
+        const targetWidth = app.screen.width * 0.8
+        const scale = targetWidth / actualWidth
+        model.scale.set(scale)
+
+        // layout 정보 활용: 자동 스케일/위치 조정
+        const layout = (model as any).internalModel?.settings?.layout;
+        if (layout) {
+          // 위치 자동 조정
+          if (layout.center_x !== undefined) {
+            model.x = app.screen.width * (0.5 + layout.center_x / 2)
+          } else {
+            model.x = app.screen.width / 2
+          }
+          if (layout.center_y !== undefined) {
+            model.y = app.screen.height * (1 + layout.center_y / 2)
+          } else {
+            model.y = app.screen.height * 0.8
+          }
+          model.anchor.set(0.5, 1)
+        } else {
+          // layout 정보가 없으면 기존 방식 fallback
+          model.x = app.screen.width / 2
+          model.y = app.screen.height * 0.8
+          model.anchor.set(0.5, 1)
+        }
 
         // 기본 모션(있으면) 재생
         if (model.internalModel.motionManager) {
@@ -109,7 +165,7 @@ const Live2DCanvas: React.FC<Live2DCanvasProps> = ({
       appRef.current = null
       modelRef.current = null
     }
-  }, [modelPath, onModelLoaded, onModelError])
+  }, [modelPath])
 
   return (
     <div className="live2d-canvas-container">
@@ -128,6 +184,6 @@ const Live2DCanvas: React.FC<Live2DCanvasProps> = ({
       )}
     </div>
   )
-}
+})
 
 export default Live2DCanvas 

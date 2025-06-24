@@ -1,6 +1,6 @@
-import React from 'react'
+import React, { useRef } from 'react'
 import './App.css'
-import Live2DCanvas from './components/live2d/Live2DCanvas'
+import Live2DCanvas, { Live2DCanvasHandle } from './components/live2d/Live2DCanvas'
 import ChatWindow from './components/chat/ChatWindow'
 import ChatInput from './components/chat/ChatInput'
 import { LIVE2D_MODEL_PATH } from './constants/live2d'
@@ -19,6 +19,7 @@ const App: React.FC = () => {
   ])
   const [isTyping, setIsTyping] = React.useState(false)
   const [isModelLoaded, setIsModelLoaded] = React.useState(false)
+  const live2dRef = useRef<Live2DCanvasHandle>(null)
 
   // AI 응답 생성 함수
   const generateAIResponse = (userMessage: string): string => {
@@ -58,6 +59,8 @@ const App: React.FC = () => {
     if (!text.trim()) return
     setMessages(prev => [...prev, { id: Date.now().toString(), type: 'user', content: text, timestamp: new Date() }])
     setIsTyping(true)
+    // Live2D 캐릭터 랜덤 모션 트리거
+    live2dRef.current?.triggerRandomMotion()
     // AI 응답 시뮬레이션 (실제 API 연동 필요)
     setTimeout(() => {
       const aiResponse: ChatMessage = {
@@ -90,6 +93,7 @@ const App: React.FC = () => {
     <div className="app-root flex flex-row h-screen bg-gradient-to-br from-slate-900 to-slate-800">
       <div className="live2d-panel flex-1 flex items-center justify-center p-4">
         <Live2DCanvas 
+          ref={live2dRef}
           modelPath={LIVE2D_MODEL_PATH}
           onModelLoaded={handleModelLoaded}
           onModelError={handleModelError}
