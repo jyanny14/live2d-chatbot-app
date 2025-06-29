@@ -4,6 +4,7 @@ import Live2DCanvas, { Live2DCanvasHandle } from './components/live2d/Live2DCanv
 import ChatWindow from './components/chat/ChatWindow'
 import ChatInput from './components/chat/ChatInput'
 import { LIVE2D_MODEL_PATH } from './constants/live2d'
+import { OllamaAPI } from './utils/ollama-api'
 
 // ChatMessage 타입: id, type('user'|'ai'), content, timestamp
 interface ChatMessage {
@@ -19,59 +20,127 @@ const App: React.FC = () => {
   ])
   const [isTyping, setIsTyping] = React.useState(false)
   const [isModelLoaded, setIsModelLoaded] = React.useState(false)
+  const [isOllamaConnected, setIsOllamaConnected] = React.useState(false)
   const live2dRef = useRef<Live2DCanvasHandle>(null)
+  
+  // OllamaAPI 인스턴스 생성
+  const ollamaAPI = React.useMemo(() => new OllamaAPI(), [])
 
-  // AI 응답 생성 함수
-  const generateAIResponse = (userMessage: string): string => {
-    const responses = [
-      "안녕하세요! 무엇을 도와드릴까요? 😊",
-      "흥미로운 질문이네요! 더 자세히 설명해드릴게요.",
-      "그것에 대해 생각해보겠습니다... 🤔",
-      "좋은 질문입니다! 제가 아는 한도에서 답변해드릴게요.",
-      "음... 그건 정말 재미있는 주제네요!",
-      "도움이 되었다니 기쁩니다! 😄",
-      "더 궁금한 것이 있으시면 언제든 물어보세요!",
-      "오늘 날씨는 어떤가요? ☀️",
-      "재미있는 이야기를 해드릴까요?",
-      "무엇이든 물어보세요. 친근한 AI가 답변해드릴게요! 🤖"
-    ]
-    
-    // 사용자 메시지에 따른 맞춤 응답
-    if (userMessage.includes('안녕') || userMessage.includes('hello')) {
-      return "안녕하세요! 반갑습니다! 😊 오늘은 어떤 이야기를 나눠볼까요?"
+  // Ollama 연결 상태 확인
+  React.useEffect(() => {
+    const checkOllamaConnection = async () => {
+      try {
+        const isRunning = await ollamaAPI.healthCheck()
+        setIsOllamaConnected(isRunning)
+        if (isRunning) {
+          console.log('✅ Ollama 서버에 연결되었습니다.')
+        } else {
+          console.log('⚠️ Ollama 서버가 실행되지 않았습니다.')
+        }
+      } catch (error) {
+        console.error('❌ Ollama 연결 확인 실패:', error)
+        setIsOllamaConnected(false)
+      }
     }
-    if (userMessage.includes('날씨')) {
-      return "날씨에 대해 물어보시는군요! 🌤️ 오늘은 정말 좋은 날씨네요. 산책하기 딱 좋을 것 같아요!"
+
+    checkOllamaConnection()
+    // 주기적으로 연결 상태 확인
+    const interval = setInterval(checkOllamaConnection, 10000)
+    return () => clearInterval(interval)
+  }, [ollamaAPI])
+
+  // LLM을 사용한 AI 응답 생성
+  const generateAIResponse = async (userMessage: string) => {
+    try {
+      setIsTyping(true)
+      console.log('🤖 AI 응답 생성 시작:', userMessage)
+
+      // 사용자 메시지 추가
+      const userMsg: ChatMessage = {
+        id: Date.now().toString(),
+        type: 'user',
+        content: userMessage,
+        timestamp: new Date()
+      }
+      setMessages(prev => [...prev, userMsg])
+
+      // AI 응답 생성
+      const aiResponse = await ollamaAPI.safeChat([
+        { role: 'user', content: userMessage }
+      ])
+
+      console.log('🤖 AI 응답 생성 완료:', aiResponse)
+
+      // AI 응답 추가
+      const aiMsg: ChatMessage = {
+        id: (Date.now() + 1).toString(),
+        type: 'ai',
+        content: aiResponse,
+        timestamp: new Date()
+      }
+      setMessages(prev => [...prev, aiMsg])
+
+      // Steam 통계 업데이트
+      await OllamaAPI.updateSteamStats(messages.length + 2, messages.length + 2)
+
+    } catch (error) {
+      console.error('❌ AI 응답 생성 실패:', error)
+      
+      // 에러 메시지 추가
+      const errorMsg: ChatMessage = {
+        id: (Date.now() + 1).toString(),
+        type: 'ai',
+        content: '죄송합니다. 응답을 생성하는 중에 오류가 발생했습니다. 다시 시도해주세요.',
+        timestamp: new Date()
+      }
+      setMessages(prev => [...prev, errorMsg])
+    } finally {
+      setIsTyping(false)
     }
-    if (userMessage.includes('재미') || userMessage.includes('이야기')) {
-      return "재미있는 이야기를 해드릴까요? 🎭 한 번은 작은 토끼가 큰 산을 오르려고 했는데..."
-    }
-    if (userMessage.includes('고마워') || userMessage.includes('감사')) {
-      return "천만에요! 도움이 되었다니 정말 기쁩니다! 😄 더 궁금한 것이 있으시면 언제든 말씀해주세요!"
-    }
-    
-    // 랜덤 응답
-    return responses[Math.floor(Math.random() * responses.length)]
   }
 
   // 메시지 전송 처리
-  const handleSend = (text: string) => {
-    if (!text.trim()) return
-    setMessages(prev => [...prev, { id: Date.now().toString(), type: 'user', content: text, timestamp: new Date() }])
+  const handleSend = async (text: string) => {
+    console.log('📤 handleSend 호출됨:', { text, textLength: text.length });
+    
+    if (!text.trim()) {
+      console.log('⚠️ 빈 메시지 무시됨');
+      return
+    }
+
+    // 사용자 메시지 추가
+    const userMessage: ChatMessage = {
+      id: Date.now().toString(),
+      type: 'user',
+      content: text,
+      timestamp: new Date()
+    }
+    
+    console.log('👤 사용자 메시지 생성:', userMessage);
+    setMessages(prev => [...prev, userMessage])
     setIsTyping(true)
+
     // Live2D 캐릭터 랜덤 모션 트리거
     live2dRef.current?.triggerRandomMotion()
-    // AI 응답 시뮬레이션 (실제 API 연동 필요)
-    setTimeout(() => {
-      const aiResponse: ChatMessage = {
+
+    try {
+      console.log('🤖 AI 응답 생성 시작...');
+      // AI 응답 생성
+      await generateAIResponse(text)
+
+    } catch (error) {
+      console.error('❌ 메시지 처리 실패:', error)
+      setIsTyping(false)
+      
+      // 오류 메시지 추가
+      const errorMessage: ChatMessage = {
         id: (Date.now() + 1).toString(),
         type: 'ai',
-        content: generateAIResponse(text),
+        content: "죄송합니다. 응답을 생성하는 중에 오류가 발생했습니다.",
         timestamp: new Date()
       }
-      setIsTyping(false)
-      setMessages(prev => [...prev, aiResponse])
-    }, 1200)
+      setMessages(prev => [...prev, errorMessage])
+    }
   }
 
   // 대화 지우기
@@ -100,8 +169,25 @@ const App: React.FC = () => {
         />
       </div>
       <div className="chat-panel w-[420px] flex flex-col h-full bg-white/10 backdrop-blur-md border-l border-white/10 shadow-xl">
-        <ChatWindow messages={messages} isTyping={isTyping} onClearChat={handleClear} />
-        <ChatInput onSendMessage={handleSend} />
+        {/* Ollama 연결 상태 표시 */}
+        <div className={`px-4 py-2 text-xs text-center ${
+          isOllamaConnected 
+            ? 'bg-green-500/20 text-green-300' 
+            : 'bg-red-500/20 text-red-300'
+        }`}>
+          {isOllamaConnected ? '🤖 AI 연결됨' : '⚠️ AI 연결 안됨'}
+        </div>
+        
+        <ChatWindow 
+          messages={messages} 
+          isTyping={isTyping} 
+          onClearChat={handleClear} 
+        />
+        <ChatInput 
+          onSendMessage={handleSend} 
+          disabled={!isOllamaConnected}
+          placeholder={isOllamaConnected ? "메시지를 입력하세요..." : "AI 서버 연결 대기 중..."}
+        />
       </div>
     </div>
   )

@@ -6,9 +6,20 @@ yarn-error.log*
 
 # Build outputs
 dist/
+release/
 build/
-out/
-dist-electron/
+
+# Ollama files
+ollama/
+*.model
+
+# Ollama models and cache
+ollama/models/
+ollama/cache/
+*.bin
+*.safetensors
+*.gguf
+*.ggml
 
 # Environment variables
 .env
@@ -23,18 +34,13 @@ dist-electron/
 *.swp
 *.swo
 
-# OS generated files
+# OS files
 .DS_Store
-.DS_Store?
-._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
 Thumbs.db
 
 # Logs
-*.log
 logs/
+*.log
 
 # Runtime data
 pids/
@@ -45,13 +51,5 @@ pids/
 # Coverage directory used by tools like istanbul
 coverage/
 
-# Electron specific
-app/
-release/
-
-# Live2D models (optional - if models are large)
-# public/models/
-
-# Temporary files
-*.tmp
-*.temp
+# Electron
+out/
