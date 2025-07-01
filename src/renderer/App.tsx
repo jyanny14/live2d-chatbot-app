@@ -15,6 +15,11 @@ interface ChatMessage {
 }
 
 const App: React.FC = () => {
+  // 고유한 ID 생성 함수
+  const generateUniqueId = () => {
+    return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+  };
+
   const [messages, setMessages] = React.useState<ChatMessage[]>([
     { id: 'welcome', type: 'ai', content: '안녕하세요! 무엇을 도와드릴까요?', timestamp: new Date() }
   ])
@@ -55,15 +60,6 @@ const App: React.FC = () => {
       setIsTyping(true)
       console.log('🤖 AI 응답 생성 시작:', userMessage)
 
-      // 사용자 메시지 추가
-      const userMsg: ChatMessage = {
-        id: Date.now().toString(),
-        type: 'user',
-        content: userMessage,
-        timestamp: new Date()
-      }
-      setMessages(prev => [...prev, userMsg])
-
       // AI 응답 생성
       const aiResponse = await ollamaAPI.safeChat([
         { role: 'user', content: userMessage }
@@ -73,7 +69,7 @@ const App: React.FC = () => {
 
       // AI 응답 추가
       const aiMsg: ChatMessage = {
-        id: (Date.now() + 1).toString(),
+        id: generateUniqueId(),
         type: 'ai',
         content: aiResponse,
         timestamp: new Date()
@@ -88,7 +84,7 @@ const App: React.FC = () => {
       
       // 에러 메시지 추가
       const errorMsg: ChatMessage = {
-        id: (Date.now() + 1).toString(),
+        id: generateUniqueId(),
         type: 'ai',
         content: '죄송합니다. 응답을 생성하는 중에 오류가 발생했습니다. 다시 시도해주세요.',
         timestamp: new Date()
@@ -110,7 +106,7 @@ const App: React.FC = () => {
 
     // 사용자 메시지 추가
     const userMessage: ChatMessage = {
-      id: Date.now().toString(),
+      id: generateUniqueId(),
       type: 'user',
       content: text,
       timestamp: new Date()
@@ -134,7 +130,7 @@ const App: React.FC = () => {
       
       // 오류 메시지 추가
       const errorMessage: ChatMessage = {
-        id: (Date.now() + 1).toString(),
+        id: generateUniqueId(),
         type: 'ai',
         content: "죄송합니다. 응답을 생성하는 중에 오류가 발생했습니다.",
         timestamp: new Date()

@@ -120,4 +120,14 @@ export class ContentFilter {
     console.log(`[CONTENT FILTER] Filtered: "${originalText}" - Reason: ${reason}`);
     // 실제 구현에서는 로그 파일에 기록
   }
+
+  filterUserInput(input: string): string {
+    // TODO: 부적절한 내용 필터링 로직 구현
+    return input;
+  }
+
+  filterResponse(response: string): string {
+    // TODO: 부적절한 응답 필터링 로직 구현
+    return response;
+  }
 } 

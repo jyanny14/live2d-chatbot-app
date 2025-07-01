@@ -1,5 +1,8 @@
 const OLLAMA_API_BASE = 'http://127.0.0.1:11434/api';
 
+import { ContentFilter } from '../../main/content-filter';
+import { OLLAMA_MODELS, DEFAULT_MODEL } from '../../constants/models';
+
 export interface OllamaGenerateRequest {
   model: string;
   prompt: string;
@@ -67,46 +70,29 @@ export interface OllamaModel {
   size: number;
 }
 
-// Steam 제출을 위한 안전한 프롬프트 템플릿
-const SAFE_PROMPT_TEMPLATE = `
-당신은 친근하고 도움이 되는 AI 어시스턴트입니다. 다음 규칙을 반드시 따라주세요:
 
-1. 항상 친절하고 정중하게 답변하세요
-2. 부적절하거나 성적인 내용은 절대 언급하지 마세요
-3. 폭력이나 혐오 표현을 사용하지 마세요
-4. 건전하고 교육적인 대화를 나누세요
-5. 한국어로 답변하세요
 
-사용자 질문: {prompt}
-`;
 
-export const OLLAMA_DEFAULT_MODEL = 'gemma:2b';
 
 export class OllamaAPI {
   private readonly apiUrl: string;
   private readonly defaultModel: string;
-  private readonly fallbackModels: string[];
+  private readonly fallbackModels: readonly string[];
   private readonly defaultOptions: OllamaGenerateRequest['options'];
+  private filter = new ContentFilter();
 
   constructor(
     apiUrl: string = 'http://127.0.0.1:11434',
-    defaultModel: string = 'tinyllama:1.1b'
+    defaultModel: string = OLLAMA_MODELS.DEFAULT
   ) {
     this.apiUrl = apiUrl;
     this.defaultModel = defaultModel;
-    // Windows에서 더 안정적으로 작동하는 모델들
-    this.fallbackModels = [
-      'tinyllama:1.1b',
-      'llama2:7b',
-      'llama2:7b-chat',
-      'gemma:2b',
-      'mistral:7b',
-      'qwen2:0.5b'
-    ];
+    // Fallback 모델 목록 사용
+    this.fallbackModels = OLLAMA_MODELS.FALLBACK_MODELS;
     this.defaultOptions = {
       temperature: 0.7,
       top_p: 0.9,
-      num_predict: 500,
+      num_predict: 200, // 토큰 수 줄임
       stop: ['\n\n', '사용자:', 'User:']
     };
   }
@@ -120,28 +106,21 @@ export class OllamaAPI {
   ): Promise<OllamaGenerateResponse> {
     try {
       // 사용자 입력 필터링
-      const { ContentFilter } = await import('../../main/content-filter');
-      const inputCheck = ContentFilter.filterUserInput(prompt);
-      
-      if (!inputCheck.isAppropriate) {
-        throw new Error('부적절한 입력이 감지되었습니다.');
-      }
-
-      // 안전한 프롬프트로 변환
-      const safePrompt = SAFE_PROMPT_TEMPLATE.replace('{prompt}', inputCheck.filteredInput);
+      const filteredPrompt = this.filter.filterUserInput(prompt);
       
       const requestBody: OllamaGenerateRequest = {
-        model: options?.model || this.defaultModel,
-        prompt: safePrompt,
+        model: options?.model || OLLAMA_MODELS.DEFAULT,
+        prompt: filteredPrompt,
+        system: options?.system || '당신은 친근하고 도움이 되는 AI 어시스턴트입니다. 다음 규칙을 반드시 따라주세요:\n1. 항상 친절하고 정중하게 답변하세요\n2. 부적절하거나 성적인 내용은 절대 언급하지 마세요\n3. 폭력이나 혐오 표현을 사용하지 마세요\n4. 건전하고 교육적인 대화를 나누세요\n5. 한국어로 답변하세요',
         stream: false,
         options: {
           ...this.defaultOptions,
           ...options?.options
-        },
-        ...options
+        }
       };
 
       console.log('📤 Generate 요청:', requestBody);
+      console.log('📤 요청 본문 (JSON):', JSON.stringify(requestBody, null, 2));
 
       const response = await fetch(`${this.apiUrl}/api/generate`, {
         method: 'POST',
@@ -152,7 +131,30 @@ export class OllamaAPI {
       });
 
       if (!response.ok) {
-        const errorData: OllamaErrorResponse = await response.json().catch(() => ({ error: '알 수 없는 오류' }));
+        console.error('❌ HTTP 응답 오류:', {
+          status: response.status,
+          statusText: response.statusText,
+          url: response.url
+        });
+        
+        // 응답 본문을 텍스트로 먼저 가져오기
+        const responseText = await response.text();
+        console.error('❌ 응답 본문:', responseText);
+        
+        let errorData: OllamaErrorResponse;
+        try {
+          errorData = JSON.parse(responseText);
+        } catch (parseError) {
+          console.error('❌ JSON 파싱 실패:', parseError);
+          errorData = { error: responseText || '알 수 없는 오류' };
+        }
+        
+        console.error('❌ Ollama 에러 상세:', {
+          status: response.status,
+          error: errorData.error,
+          fullResponse: responseText
+        });
+        
         throw new Error(`Ollama API 오류 (${response.status}): ${errorData.error}`);
       }
 
@@ -164,7 +166,7 @@ export class OllamaAPI {
       }
 
       // AI 응답 필터링
-      data.response = ContentFilter.filterResponse(data.response);
+      data.response = this.filter.filterResponse(data.response);
       
       return data;
     } catch (error) {
@@ -193,60 +195,35 @@ export class OllamaAPI {
   async chat(
     messages: Array<{ role: 'user' | 'assistant' | 'system'; content: string }>,
     options?: Partial<OllamaChatRequest>
-  ): Promise<OllamaChatResponse> {
+  ): Promise<OllamaGenerateResponse> {
     try {
       console.log('🔍 Chat 메서드 호출됨:', { messagesCount: messages.length, model: options?.model || this.defaultModel });
-      
-      // 메시지 필터링
-      const { ContentFilter } = await import('../../main/content-filter');
-      
-      const filteredMessages = messages.map(msg => {
-        if (msg.role === 'user') {
-          const inputCheck = ContentFilter.filterUserInput(msg.content);
-          if (!inputCheck.isAppropriate) {
-            throw new Error('부적절한 입력이 감지되었습니다.');
-          }
-          return { ...msg, content: inputCheck.filteredInput };
-        }
-        return { ...msg, content: ContentFilter.filterResponse(msg.content) };
-      });
-
-      const requestBody: OllamaChatRequest = {
+      // 마지막 user 메시지만 추출
+      const lastUserMsg = messages.reverse().find(m => m.role === 'user')?.content || '';
+      const filteredInput = this.filter.filterUserInput(lastUserMsg);
+      const requestBody: OllamaGenerateRequest = {
         model: options?.model || this.defaultModel,
-        messages: filteredMessages,
+        prompt: filteredInput,
+        system: '당신은 친근하고 도움이 되는 AI 어시스턴트입니다. 항상 친절하고 정중하게 한국어로 답변해주세요.',
         stream: false,
         options: {
           ...this.defaultOptions,
           ...options?.options
-        },
-        ...options
+        }
       };
-
-      console.log('📤 Chat 요청:', requestBody);
-
-      const response = await fetch(`${this.apiUrl}/api/chat`, {
+      const response = await fetch(`${this.apiUrl}/api/generate`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(requestBody),
       });
-
       if (!response.ok) {
         const errorData: OllamaErrorResponse = await response.json().catch(() => ({ error: '알 수 없는 오류' }));
-        throw new Error(`Ollama Chat API 오류 (${response.status}): ${errorData.error}`);
+        throw new Error(`Ollama API 오류 (${response.status}): ${errorData.error}`);
       }
-
-      const data: OllamaChatResponse = await response.json();
-      console.log('📥 Chat 응답:', data);
-      
-      if (!data.done) {
-        throw new Error('응답이 완료되지 않았습니다');
-      }
-
-      // AI 응답 필터링
-      data.message.content = ContentFilter.filterResponse(data.message.content);
-      
+      const data: OllamaGenerateResponse = await response.json();
+      data.response = this.filter.filterResponse(data.response);
       return data;
     } catch (error) {
       console.error('❌ Chat 실패:', error);
@@ -255,18 +232,19 @@ export class OllamaAPI {
   }
 
   /**
-   * 간단한 채팅 (사용자 메시지만 받아서 처리)
+   * 간단한 채팅 (tinyllama:1.1b 모델 사용)
    */
   async simpleChat(
     userMessage: string,
-    model: string = this.defaultModel
+    model: string = OLLAMA_MODELS.DEFAULT
   ): Promise<string> {
     try {
-      const response = await this.chat([
-        { role: 'user', content: userMessage }
-      ], { model });
-      
-      return response.message.content;
+      const systemPrompt = '당신은 친근하고 도움이 되는 AI 어시스턴트입니다. 항상 친절하고 정중하게 한국어로 답변해주세요.';
+      const response = await this.generate(userMessage, { 
+        model: OLLAMA_MODELS.DEFAULT,
+        system: systemPrompt
+      });
+      return response.response;
     } catch (error) {
       console.error('❌ Simple Chat 실패:', error);
       throw error;
@@ -283,25 +261,17 @@ export class OllamaAPI {
   ): Promise<void> {
     try {
       // 사용자 입력 필터링
-      const { ContentFilter } = await import('../../main/content-filter');
-      const inputCheck = ContentFilter.filterUserInput(prompt);
-      
-      if (!inputCheck.isAppropriate) {
-        throw new Error('부적절한 입력이 감지되었습니다.');
-      }
-
-      // 안전한 프롬프트로 변환
-      const safePrompt = SAFE_PROMPT_TEMPLATE.replace('{prompt}', inputCheck.filteredInput);
+      const filteredPrompt = this.filter.filterUserInput(prompt);
       
       const requestBody: OllamaGenerateRequest = {
-        model: options?.model || this.defaultModel,
-        prompt: safePrompt,
+        model: options?.model || OLLAMA_MODELS.DEFAULT,
+        prompt: filteredPrompt,
+        system: options?.system || '당신은 친근하고 도움이 되는 AI 어시스턴트입니다. 항상 친절하고 정중하게 한국어로 답변해주세요.',
         stream: true,
         options: {
           ...this.defaultOptions,
           ...options?.options
-        },
-        ...options
+        }
       };
 
       const response = await fetch(`${this.apiUrl}/api/generate`, {
@@ -335,7 +305,7 @@ export class OllamaAPI {
           try {
             const data: Partial<OllamaGenerateResponse> = JSON.parse(line);
             if (data.response) {
-              const filteredChunk = ContentFilter.filterResponse(data.response);
+              const filteredChunk = this.filter.filterResponse(data.response);
               onChunk(filteredChunk);
             }
             if (data.done) {
@@ -347,7 +317,7 @@ export class OllamaAPI {
         }
       }
     } catch (error) {
-      console.error('❌ Stream 실패:', error);
+      console.error('❌ GenerateStream 실패:', error);
       throw error;
     }
   }
@@ -520,41 +490,55 @@ export class OllamaAPI {
   }
 
   /**
-   * 안전한 채팅 (모델 실패 시 대체 모델 시도)
+   * 안전한 채팅 (tinyllama:1.1b 모델만 사용)
    */
   async safeChat(messages: Array<{ role: 'user' | 'assistant'; content: string }>): Promise<string> {
-    const availableModel = await this.findAvailableModel();
-    
+    const lastUserMessage = messages.filter(m => m.role === 'user').pop();
+    if (!lastUserMessage) {
+      throw new Error('사용자 메시지가 없습니다');
+    }
+
+    // tinyllama:1.1b 모델이 설치되어 있는지 확인
+    const availableModels = await this.getModels();
+    console.log('📋 사용 가능한 모델들:', availableModels);
+
+    if (!availableModels.includes(OLLAMA_MODELS.DEFAULT)) {
+      throw new Error(`${OLLAMA_MODELS.DEFAULT} 모델이 설치되지 않았습니다. 먼저 모델을 설치해주세요.`);
+    }
+
+    // 대화 컨텍스트를 고려한 system 프롬프트
+    const systemPrompt = `당신은 친근하고 도움이 되는 AI 어시스턴트입니다. 
+
+다음 규칙을 반드시 따라주세요:
+1. 항상 친절하고 정중하게 답변하세요
+2. 부적절하거나 성적인 내용은 절대 언급하지 마세요
+3. 폭력이나 혐오 표현을 사용하지 마세요
+4. 건전하고 교육적인 대화를 나누세요
+5. 한국어로 답변하세요
+6. 사용자의 질문에 대해 명확하고 도움이 되는 답변을 제공하세요
+7. 필요시 유머러스하게 대답할 수 있지만 항상 적절한 수준을 유지하세요
+
+이전 대화 내용을 참고하여 자연스럽게 대화를 이어가세요.`;
+
     try {
-      // 마지막 사용자 메시지를 프롬프트로 사용
-      const lastUserMessage = messages.filter(m => m.role === 'user').pop();
-      if (!lastUserMessage) {
-        throw new Error('사용자 메시지가 없습니다');
-      }
+      console.log(`🤖 ${OLLAMA_MODELS.DEFAULT} 모델로 응답 생성 중...`);
       
-      const result = await this.generate(lastUserMessage.content, { model: availableModel });
-      return result.response;
-    } catch (error) {
-      console.error(`❌ 모델 ${availableModel} 실패:`, error);
-      
-      // 다른 모델들 시도
-      const models = await this.getModels();
-      for (const model of models) {
-        if (model !== availableModel) {
-          try {
-            console.log(`🔄 다른 모델 시도: ${model}`);
-            const lastUserMessage = messages.filter(m => m.role === 'user').pop();
-            if (lastUserMessage) {
-              const result = await this.generate(lastUserMessage.content, { model });
-              return result.response;
-            }
-          } catch (retryError) {
-            console.error(`❌ 모델 ${model} 실패:`, retryError);
-          }
+      const result = await this.generate(lastUserMessage.content, { 
+        model: OLLAMA_MODELS.DEFAULT,
+        system: systemPrompt,
+        options: {
+          ...this.defaultOptions,
+          num_predict: 150, // 적당한 응답 길이
+          temperature: 0.7, // 적당한 창의성
         }
-      }
+      });
       
-      throw new Error('모든 모델에서 실패했습니다');
+      console.log(`✅ ${OLLAMA_MODELS.DEFAULT} 모델 성공!`);
+      return result.response;
+      
+    } catch (error: any) {
+      console.error(`❌ ${OLLAMA_MODELS.DEFAULT} 모델 실패:`, error.message);
+      throw new Error(`${OLLAMA_MODELS.DEFAULT} 모델에서 오류가 발생했습니다: ${error.message}`);
     }
   }
 } 

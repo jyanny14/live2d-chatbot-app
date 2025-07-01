@@ -1,6 +1,7 @@
 import { app, BrowserWindow } from 'electron'
 import { join } from 'path'
-import { OllamaService, DEFAULT_MODEL } from './ollama-service'
+import { OllamaService } from './ollama-service'
+import { DEFAULT_MODEL } from '../constants/models'
 import * as fs from 'fs'
 
 process.env['ELECTRON_DISABLE_SECURITY_WARNINGS'] = 'true'
