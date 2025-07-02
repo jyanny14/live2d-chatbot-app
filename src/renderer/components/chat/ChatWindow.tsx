@@ -69,17 +69,24 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
         ) : (
           // 메시지 목록
           <>
-            {messages.map((message) => (
-              <Message
-                key={message.id}
-                type={message.type}
-                content={message.content}
-                timestamp={message.timestamp}
-              />
-            ))}
+            {messages.map((message, index) => {
+              // 마지막 AI 메시지가 스트리밍 중인지 확인
+              const isLastMessage = index === messages.length - 1;
+              const isStreaming = isLastMessage && message.type === 'ai' && isTyping;
+              
+              return (
+                <Message
+                  key={message.id}
+                  type={message.type}
+                  content={message.content}
+                  timestamp={message.timestamp}
+                  isStreaming={isStreaming}
+                />
+              );
+            })}
             
-            {/* 타이핑 인디케이터 */}
-            {isTyping && (
+            {/* 타이핑 인디케이터 (빈 메시지일 때만) */}
+            {isTyping && messages.length > 0 && messages[messages.length - 1].type === 'user' && (
               <Message
                 type="ai"
                 content=""

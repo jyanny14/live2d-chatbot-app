@@ -1,15 +1,7 @@
 // Ollama 모델 상수 정의
 export const OLLAMA_MODELS = {
   // 기본 모델
-  DEFAULT: 'qwen3:0.6b',
-  
-  // 사용 가능한 모델들
-  QWEN: 'qwen3:0.6b',
-  
-  // Fallback 모델 목록 (우선순위 순서)
-  FALLBACK_MODELS: [
-    'qwen3:0.6b'
-  ]
+  DEFAULT: 'DeepSeek-R1-Distill-Qwen-1.5B-Q6_K_L'
 } as const;
 
 // 모델 타입 정의

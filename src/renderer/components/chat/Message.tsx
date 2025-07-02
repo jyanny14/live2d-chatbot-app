@@ -5,9 +5,16 @@ interface MessageProps {
   content: string
   timestamp: Date
   isTyping?: boolean
+  isStreaming?: boolean
 }
 
-const Message: React.FC<MessageProps> = ({ type, content, timestamp, isTyping = false }) => {
+const Message: React.FC<MessageProps> = ({ 
+  type, 
+  content, 
+  timestamp, 
+  isTyping = false,
+  isStreaming = false 
+}) => {
   const isUser = type === 'user'
 
   return (
@@ -29,9 +36,10 @@ const Message: React.FC<MessageProps> = ({ type, content, timestamp, isTyping = 
               ? 'bg-blue-500 text-white rounded-br-md'
               : 'bg-gray-700 text-white rounded-bl-md'
           }`}>
-            {isTyping ? (
+            {isTyping && !content ? (
+              // 타이핑 인디케이터 (빈 메시지일 때)
               <div className="flex items-center gap-1">
-                <span>AI가 타이핑 중</span>
+                <span className="text-sm">AI가 타이핑 중</span>
                 <div className="flex gap-1">
                   <div className="w-2 h-2 bg-white rounded-full animate-bounce"></div>
                   <div className="w-2 h-2 bg-white rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
@@ -39,7 +47,14 @@ const Message: React.FC<MessageProps> = ({ type, content, timestamp, isTyping = 
                 </div>
               </div>
             ) : (
-              <p className="text-sm leading-relaxed">{content}</p>
+              // 실제 메시지 내용
+              <div className="text-sm leading-relaxed">
+                <p>{content}</p>
+                {/* 스트리밍 중일 때 커서 표시 */}
+                {isStreaming && (
+                  <span className="inline-block w-0.5 h-4 bg-white ml-1 animate-pulse"></span>
+                )}
+              </div>
             )}
           </div>
           
@@ -49,6 +64,9 @@ const Message: React.FC<MessageProps> = ({ type, content, timestamp, isTyping = 
               hour: '2-digit', 
               minute: '2-digit' 
             })}
+            {isStreaming && (
+              <span className="ml-2 text-green-400">스트리밍 중...</span>
+            )}
           </span>
         </div>
       </div>

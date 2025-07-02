@@ -11,7 +11,12 @@
     "dist": "npm run build && electron-builder --win --publish=never",
     "postinstall": "node scripts/download-ollama.js",
     "download-ollama": "node scripts/download-ollama.js",
-    "setup-gemma": "node scripts/setup-gemma.js"
+    "download-model": "node scripts/download-model.js",
+    "embed-model": "node scripts/embed-model.js",
+    "create-archive": "node scripts/create-model-archive.js",
+    "setup-gemma": "node scripts/setup-gemma.js",
+    "copy-gguf": "node scripts/copy-gguf-model.js",
+    "create-modelfile": "node scripts/create-modelfile.js"
   },
   "dependencies": {
     "@tailwindcss/postcss": "^4.1.10",
@@ -50,12 +55,18 @@
     "files": [
       "dist/**/*",
       "node_modules/**/*",
-      "ollama/**/*"
+      "ollama/**/*",
+      "models/**/*"
     ],
     "extraResources": [
       {
         "from": "ollama",
         "to": "ollama",
+        "filter": ["**/*"]
+      },
+      {
+        "from": "models",
+        "to": "models",
         "filter": ["**/*"]
       }
     ],

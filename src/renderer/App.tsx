@@ -1,4 +1,4 @@
-import React, { useRef } from 'react'
+import React, { useRef, useState, useCallback } from 'react'
 import './App.css'
 import Live2DCanvas, { Live2DCanvasHandle } from './components/live2d/Live2DCanvas'
 import ChatWindow from './components/chat/ChatWindow'
@@ -20,12 +20,14 @@ const App: React.FC = () => {
     return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
   };
 
-  const [messages, setMessages] = React.useState<ChatMessage[]>([
+  const [messages, setMessages] = useState<ChatMessage[]>([
     { id: 'welcome', type: 'ai', content: '안녕하세요! 무엇을 도와드릴까요?', timestamp: new Date() }
   ])
-  const [isTyping, setIsTyping] = React.useState(false)
-  const [isModelLoaded, setIsModelLoaded] = React.useState(false)
-  const [isOllamaConnected, setIsOllamaConnected] = React.useState(false)
+  const [isTyping, setIsTyping] = useState(false)
+  const [isModelLoaded, setIsModelLoaded] = useState(false)
+  const [isOllamaConnected, setIsOllamaConnected] = useState(false)
+  const [streamingMessage, setStreamingMessage] = useState('')
+  
   const live2dRef = useRef<Live2DCanvasHandle>(null)
   
   // OllamaAPI 인스턴스 생성
@@ -54,33 +56,38 @@ const App: React.FC = () => {
     return () => clearInterval(interval)
   }, [ollamaAPI])
 
-  // LLM을 사용한 AI 응답 생성
-  const generateAIResponse = async (userMessage: string) => {
+  // 스트리밍 AI 응답 생성
+  const generateAIResponseStream = useCallback(async (userMessage: string) => {
     try {
       setIsTyping(true)
-      console.log('🤖 AI 응답 생성 시작:', userMessage)
+      setStreamingMessage('')
+      console.log('🤖 AI 스트리밍 응답 생성 시작:', userMessage)
 
-      // AI 응답 생성
-      const aiResponse = await ollamaAPI.safeChat([
-        { role: 'user', content: userMessage }
-      ])
+      // 스트리밍 응답 생성
+      const fullResponse = await ollamaAPI.chatStream(
+        userMessage,
+        (chunk: string) => {
+          setStreamingMessage(prev => prev + chunk)
+        }
+      )
 
-      console.log('🤖 AI 응답 생성 완료:', aiResponse)
+      console.log('🤖 AI 스트리밍 응답 생성 완료:', fullResponse)
 
-      // AI 응답 추가
+      // 최종 AI 응답 추가
       const aiMsg: ChatMessage = {
         id: generateUniqueId(),
         type: 'ai',
-        content: aiResponse,
+        content: fullResponse,
         timestamp: new Date()
       }
       setMessages(prev => [...prev, aiMsg])
+      setStreamingMessage('')
 
       // Steam 통계 업데이트
       await OllamaAPI.updateSteamStats(messages.length + 2, messages.length + 2)
 
     } catch (error) {
-      console.error('❌ AI 응답 생성 실패:', error)
+      console.error('❌ AI 스트리밍 응답 생성 실패:', error)
       
       // 에러 메시지 추가
       const errorMsg: ChatMessage = {
@@ -90,19 +97,23 @@ const App: React.FC = () => {
         timestamp: new Date()
       }
       setMessages(prev => [...prev, errorMsg])
+      setStreamingMessage('')
     } finally {
       setIsTyping(false)
     }
-  }
+  }, [ollamaAPI, messages.length])
 
   // 메시지 전송 처리
-  const handleSend = async (text: string) => {
+  const handleSend = useCallback(async (text: string) => {
     console.log('📤 handleSend 호출됨:', { text, textLength: text.length });
     
     if (!text.trim()) {
       console.log('⚠️ 빈 메시지 무시됨');
       return
     }
+
+    // 디버그: 현재 대화 히스토리 확인
+    ollamaAPI.debugHistory();
 
     // 사용자 메시지 추가
     const userMessage: ChatMessage = {
@@ -114,19 +125,19 @@ const App: React.FC = () => {
     
     console.log('👤 사용자 메시지 생성:', userMessage);
     setMessages(prev => [...prev, userMessage])
-    setIsTyping(true)
 
     // Live2D 캐릭터 랜덤 모션 트리거
     live2dRef.current?.triggerRandomMotion()
 
     try {
-      console.log('🤖 AI 응답 생성 시작...');
-      // AI 응답 생성
-      await generateAIResponse(text)
+      console.log('🤖 AI 스트리밍 응답 생성 시작...');
+      // AI 스트리밍 응답 생성
+      await generateAIResponseStream(text)
 
     } catch (error) {
       console.error('❌ 메시지 처리 실패:', error)
       setIsTyping(false)
+      setStreamingMessage('')
       
       // 오류 메시지 추가
       const errorMessage: ChatMessage = {
@@ -137,22 +148,41 @@ const App: React.FC = () => {
       }
       setMessages(prev => [...prev, errorMessage])
     }
-  }
+  }, [generateAIResponseStream, ollamaAPI])
 
   // 대화 지우기
-  const handleClear = () => {
+  const handleClear = useCallback(() => {
     setMessages([{ id: 'welcome', type: 'ai', content: '안녕하세요! 무엇을 도와드릴까요?', timestamp: new Date() }])
-  }
+    ollamaAPI.clearHistory()
+    setStreamingMessage('')
+    console.log('🗑️ 대화 히스토리 초기화됨')
+  }, [ollamaAPI])
 
   // Live2D 모델 로드 완료 처리
-  const handleModelLoaded = () => {
+  const handleModelLoaded = useCallback(() => {
     setIsModelLoaded(true)
     console.log('Live2D 모델이 성공적으로 로드되었습니다!')
-  }
+  }, [])
 
-  const handleModelError = (error: Error) => {
+  const handleModelError = useCallback((error: Error) => {
     console.error('Live2D 모델 로드 실패:', error)
-  }
+  }, [])
+
+  // 현재 스트리밍 메시지를 포함한 메시지 목록
+  const currentMessages = React.useMemo(() => {
+    if (streamingMessage && isTyping) {
+      return [
+        ...messages,
+        {
+          id: 'streaming',
+          type: 'ai' as const,
+          content: streamingMessage,
+          timestamp: new Date()
+        }
+      ]
+    }
+    return messages
+  }, [messages, streamingMessage, isTyping])
 
   return (
     <div className="app-root flex flex-row h-screen bg-gradient-to-br from-slate-900 to-slate-800">
@@ -175,7 +205,7 @@ const App: React.FC = () => {
         </div>
         
         <ChatWindow 
-          messages={messages} 
+          messages={currentMessages} 
           isTyping={isTyping} 
           onClearChat={handleClear} 
         />

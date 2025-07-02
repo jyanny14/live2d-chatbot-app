@@ -9,6 +9,9 @@ dist/
 release/
 build/
 
+# Model files
+models/
+
 # Ollama files
 ollama/
 *.model

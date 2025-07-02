@@ -1,6 +1,101 @@
 # Live2D Chatbot App
 
-Live2D 캐릭터와 AI 챗봇이 통합된 데스크톱 애플리케이션입니다. Ollama와 Gemma 2B 모델을 사용하여 로컬에서 AI 대화를 제공합니다.
+Live2D 캐릭터와 대화할 수 있는 데스크톱 애플리케이션입니다.
+
+## 주요 기능
+
+- 🤖 **AI 챗봇**: DeepSeek R1 1.5B 모델을 사용한 자연스러운 대화
+- 🎭 **Live2D 캐릭터**: 다양한 Live2D 모델 지원 (히요리, 케이, 심플)
+- 💬 **실시간 채팅**: 스트리밍 응답과 타이핑 애니메이션
+- 🎨 **아름다운 UI**: Tailwind CSS로 구현된 모던한 인터페이스
+- 🔒 **콘텐츠 필터링**: 부적절한 콘텐츠 자동 필터링
+- 🚀 **완전 내장**: Ollama와 AI 모델이 앱에 완전히 포함됨
+
+## 설치 및 실행
+
+### 1. 의존성 설치
+```bash
+npm install
+```
+
+### 2. Ollama 다운로드
+```bash
+npm run download-ollama
+```
+
+### 3. AI 모델 다운로드 (선택사항)
+```bash
+npm run download-model
+```
+> **참고**: 모델을 다운로드하지 않아도 앱 실행 시 자동으로 다운로드됩니다.
+
+### 4. 개발 모드 실행
+```bash
+npm run dev
+```
+
+### 5. 배포용 빌드
+```bash
+npm run dist
+```
+
+## 완전 내장 모델 시스템
+
+이 앱은 **완전 내장 방식**을 사용합니다:
+
+### 🔧 내장 구성 요소
+- **Ollama 서버**: 앱에 포함된 Ollama 바이너리
+- **AI 모델**: DeepSeek R1 1.5B (앱에 완전히 내장됨, 1.56GB)
+- **Live2D 모델**: 히요리, 케이, 심플 캐릭터
+
+### 🚀 자동 설정
+1. 앱 시작 시 Ollama 서버 자동 실행
+2. 내장된 AI 모델을 Ollama 디렉토리로 자동 복사
+3. 모델 복사 완료 후 즉시 사용 가능
+
+### 💾 저장 위치
+- **Ollama**: `%USERPROFILE%\.ollama\`
+- **내장 모델**: `models/deepseek-r1-1.5b/` (앱에 포함)
+- **실행 모델**: `%USERPROFILE%\.ollama\models\` (앱 실행 시 복사)
+
+### 📦 모델 내장 방법
+```bash
+# 1. 모델 다운로드 (한 번만)
+npm run download-model
+
+# 2. 모델을 앱에 내장
+npm run embed-model
+
+# 3. 앱 실행 (내장된 모델 사용)
+npm run dev
+```
+
+## 기술 스택
+
+- **프론트엔드**: React + TypeScript + Tailwind CSS
+- **백엔드**: Electron + Node.js
+- **AI**: Ollama + DeepSeek R1 1.5B
+- **그래픽**: Pixi.js + Live2D Cubism SDK
+- **빌드**: Vite + Electron Builder
+
+## 프로젝트 구조
+
+```
+live2d-chatbot-app/
+├── src/
+│   ├── main/           # Electron 메인 프로세스
+│   ├── renderer/       # React 렌더러 프로세스
+│   └── constants/      # 상수 정의
+├── public/
+│   └── models/         # Live2D 모델 파일
+├── ollama/             # Ollama 바이너리
+├── scripts/            # 설정 스크립트
+└── dist/               # 빌드 출력
+```
+
+## 라이선스
+
+MIT License
 
 ## 🚀 주요 기능
 
